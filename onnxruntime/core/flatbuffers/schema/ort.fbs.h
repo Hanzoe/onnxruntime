@@ -28,9 +28,6 @@ struct MapTypeBuilder;
 struct SequenceType;
 struct SequenceTypeBuilder;
 
-struct SparseTensorType;
-struct SparseTensorTypeBuilder;
-
 struct EdgeEnd;
 
 struct NodeEdge;
@@ -281,36 +278,33 @@ enum class TypeInfoValue : uint8_t {
   tensor_type = 1,
   sequence_type = 2,
   map_type = 3,
-  sparse_tensor_type = 4,
   MIN = NONE,
-  MAX = sparse_tensor_type
+  MAX = map_type
 };
 
-inline const TypeInfoValue (&EnumValuesTypeInfoValue())[5] {
+inline const TypeInfoValue (&EnumValuesTypeInfoValue())[4] {
   static const TypeInfoValue values[] = {
     TypeInfoValue::NONE,
     TypeInfoValue::tensor_type,
     TypeInfoValue::sequence_type,
-    TypeInfoValue::map_type,
-    TypeInfoValue::sparse_tensor_type
+    TypeInfoValue::map_type
   };
   return values;
 }
 
 inline const char * const *EnumNamesTypeInfoValue() {
-  static const char * const names[6] = {
+  static const char * const names[5] = {
     "NONE",
     "tensor_type",
     "sequence_type",
     "map_type",
-    "sparse_tensor_type",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameTypeInfoValue(TypeInfoValue e) {
-  if (flatbuffers::IsOutRange(e, TypeInfoValue::NONE, TypeInfoValue::sparse_tensor_type)) return "";
+  if (flatbuffers::IsOutRange(e, TypeInfoValue::NONE, TypeInfoValue::map_type)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesTypeInfoValue()[index];
 }
@@ -329,10 +323,6 @@ template<> struct TypeInfoValueTraits<onnxruntime::experimental::fbs::SequenceTy
 
 template<> struct TypeInfoValueTraits<onnxruntime::experimental::fbs::MapType> {
   static const TypeInfoValue enum_value = TypeInfoValue::map_type;
-};
-
-template<> struct TypeInfoValueTraits<onnxruntime::experimental::fbs::SparseTensorType> {
-  static const TypeInfoValue enum_value = TypeInfoValue::sparse_tensor_type;
 };
 
 bool VerifyTypeInfoValue(flatbuffers::Verifier &verifier, const void *obj, TypeInfoValue type);
@@ -704,59 +694,6 @@ inline flatbuffers::Offset<SequenceType> CreateSequenceType(
     flatbuffers::FlatBufferBuilder &_fbb,
     flatbuffers::Offset<onnxruntime::experimental::fbs::TypeInfo> elem_type = 0) {
   SequenceTypeBuilder builder_(_fbb);
-  builder_.add_elem_type(elem_type);
-  return builder_.Finish();
-}
-
-struct SparseTensorType FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  typedef SparseTensorTypeBuilder Builder;
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_ELEM_TYPE = 4,
-    VT_SHAPE = 6
-  };
-  onnxruntime::experimental::fbs::TensorDataType elem_type() const {
-    return static_cast<onnxruntime::experimental::fbs::TensorDataType>(GetField<int32_t>(VT_ELEM_TYPE, 0));
-  }
-  const onnxruntime::experimental::fbs::Shape *shape() const {
-    return GetPointer<const onnxruntime::experimental::fbs::Shape *>(VT_SHAPE);
-  }
-  bool Verify(flatbuffers::Verifier &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<int32_t>(verifier, VT_ELEM_TYPE) &&
-           VerifyOffset(verifier, VT_SHAPE) &&
-           verifier.VerifyTable(shape()) &&
-           verifier.EndTable();
-  }
-};
-
-struct SparseTensorTypeBuilder {
-  typedef SparseTensorType Table;
-  flatbuffers::FlatBufferBuilder &fbb_;
-  flatbuffers::uoffset_t start_;
-  void add_elem_type(onnxruntime::experimental::fbs::TensorDataType elem_type) {
-    fbb_.AddElement<int32_t>(SparseTensorType::VT_ELEM_TYPE, static_cast<int32_t>(elem_type), 0);
-  }
-  void add_shape(flatbuffers::Offset<onnxruntime::experimental::fbs::Shape> shape) {
-    fbb_.AddOffset(SparseTensorType::VT_SHAPE, shape);
-  }
-  explicit SparseTensorTypeBuilder(flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  SparseTensorTypeBuilder &operator=(const SparseTensorTypeBuilder &);
-  flatbuffers::Offset<SparseTensorType> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<SparseTensorType>(end);
-    return o;
-  }
-};
-
-inline flatbuffers::Offset<SparseTensorType> CreateSparseTensorType(
-    flatbuffers::FlatBufferBuilder &_fbb,
-    onnxruntime::experimental::fbs::TensorDataType elem_type = onnxruntime::experimental::fbs::TensorDataType::UNDEFINED,
-    flatbuffers::Offset<onnxruntime::experimental::fbs::Shape> shape = 0) {
-  SparseTensorTypeBuilder builder_(_fbb);
-  builder_.add_shape(shape);
   builder_.add_elem_type(elem_type);
   return builder_.Finish();
 }
@@ -1162,9 +1099,6 @@ struct TypeInfo FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const onnxruntime::experimental::fbs::MapType *value_as_map_type() const {
     return value_type() == onnxruntime::experimental::fbs::TypeInfoValue::map_type ? static_cast<const onnxruntime::experimental::fbs::MapType *>(value()) : nullptr;
   }
-  const onnxruntime::experimental::fbs::SparseTensorType *value_as_sparse_tensor_type() const {
-    return value_type() == onnxruntime::experimental::fbs::TypeInfoValue::sparse_tensor_type ? static_cast<const onnxruntime::experimental::fbs::SparseTensorType *>(value()) : nullptr;
-  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_DENOTATION) &&
@@ -1186,10 +1120,6 @@ template<> inline const onnxruntime::experimental::fbs::SequenceType *TypeInfo::
 
 template<> inline const onnxruntime::experimental::fbs::MapType *TypeInfo::value_as<onnxruntime::experimental::fbs::MapType>() const {
   return value_as_map_type();
-}
-
-template<> inline const onnxruntime::experimental::fbs::SparseTensorType *TypeInfo::value_as<onnxruntime::experimental::fbs::SparseTensorType>() const {
-  return value_as_sparse_tensor_type();
 }
 
 struct TypeInfoBuilder {
@@ -2318,10 +2248,6 @@ inline bool VerifyTypeInfoValue(flatbuffers::Verifier &verifier, const void *obj
     }
     case TypeInfoValue::map_type: {
       auto ptr = reinterpret_cast<const onnxruntime::experimental::fbs::MapType *>(obj);
-      return verifier.VerifyTable(ptr);
-    }
-    case TypeInfoValue::sparse_tensor_type: {
-      auto ptr = reinterpret_cast<const onnxruntime::experimental::fbs::SparseTensorType *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;

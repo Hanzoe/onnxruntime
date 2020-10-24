@@ -146,13 +146,21 @@ static void ConstructASimpleAddGraph(GraphProto& g, const char* domain) {
   SetTypeAndShape(output->mutable_type()->mutable_tensor_type(), 1, {3, 4, 5});
 }
 
+namespace sparse_details {
+const std::vector<int64_t> shape = {3, 4, 5};
+std::vector<float> values = {13.f,
+                             17.f,
+                             19.f};
+
+std::vector<int64_t> indices = {9, 30, 50};  // Not to exceed 59
+}  // namespace sparse_details
+
 // To match a simple Add graph above
 static void ConstructSparseTensor(const std::string& name,
                                   SparseTensorProto& sparse_proto) {
-  const std::vector<int64_t> shape = {3, 4, 5};
-  std::vector<float> values = {13.f,
-                               17.f,
-                               19.f};
+  const std::vector<int64_t>& shape = sparse_details::shape;
+  const std::vector<float>& values = sparse_details::values;
+
   auto& m_values = *sparse_proto.mutable_values();
   m_values.set_name(name);
   m_values.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
@@ -162,17 +170,47 @@ static void ConstructSparseTensor(const std::string& name,
   auto dest_span = gsl::make_span<float>(reinterpret_cast<float*>(&raw_data[0]), values.size());
   std::copy(values.cbegin(), values.cend(), dest_span.begin());
 
-  std::vector<int64_t> indicies = {9, 30, 50}; // Not to exceed 59
+  const std::vector<int64_t>& indices = sparse_details::indices;  // Not to exceed 59
   auto& m_indicies = *sparse_proto.mutable_indices();
   m_indicies.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_INT64);
-  *m_indicies.mutable_dims()->Add() = static_cast<int64_t>(indicies.size());
+  *m_indicies.mutable_dims()->Add() = static_cast<int64_t>(indices.size());
   auto* m_indicies_data = m_indicies.mutable_int64_data();
-  m_indicies_data->Resize(static_cast<int>(indicies.size()), 0);
-  std::copy(indicies.cbegin(), indicies.cend(), m_indicies_data->begin());
+  m_indicies_data->Resize(static_cast<int>(indices.size()), 0);
+  std::copy(indices.cbegin(), indices.cend(), m_indicies_data->begin());
 
   auto& m_dims = *sparse_proto.mutable_dims();
   m_dims.Resize(static_cast<int>(shape.size()), 0);
   std::copy(shape.cbegin(), shape.cend(), m_dims.begin());
+}
+
+static void ValidateSparseTensorProto(const SparseTensorProto& proto) {
+  // check values. We always generate float
+  EXPECT_EQ(proto.values().data_type(), ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+  EXPECT_EQ(proto.values().raw_data().size() % sizeof(float), 0U);
+  auto actual_values = gsl::make_span<const float>(reinterpret_cast<const float*>(proto.values().raw_data().data()),
+                                                   proto.values().raw_data().size()/sizeof(float));
+  // Can't use ContainerEq on float
+  EXPECT_EQ(actual_values.size(), sparse_details::values.size());
+  // std::equal() with a predicate is only in C++20
+  auto actual_begin = actual_values.cbegin();
+  const auto actual_end = actual_values.cend();
+  auto expected_begin = sparse_details::values.cbegin();
+  while (actual_begin != actual_end) {
+    auto diff = *actual_begin - *expected_begin;
+    EXPECT_TRUE(diff < std::numeric_limits<float>::epsilon()) << "Actual :" << *actual_begin << " does not match expected: " << *expected_begin;
+    ++actual_begin;
+    ++expected_begin;
+  }
+  // Check indices
+  EXPECT_EQ(proto.indices().data_type(), ONNX_NAMESPACE::TensorProto_DataType_INT64);
+  auto expected_indices = gsl::make_span(sparse_details::indices);
+  auto actual_indices = gsl::make_span<const int64_t>(proto.indices().int64_data().data(), proto.indices().int64_data_size());
+  EXPECT_THAT(actual_indices, testing::ContainerEq(actual_indices));
+  // check shape
+  const auto& dims = proto.dims();
+  auto actual_shape = gsl::make_span<const int64_t>(dims.data(), dims.size());
+  auto expected_shape = gsl::make_span(sparse_details::shape);
+  EXPECT_THAT(actual_shape, testing::ContainerEq(expected_shape));
 }
 
 TEST_F(GraphTest, SimpleAddWithoutDomain) {
@@ -1093,7 +1131,6 @@ TEST_F(GraphTest, UnusedInitializerIsIgnored) {
   ASSERT_TRUE(graph.GetAllInitializedTensors().empty());
 }
 
-
 TEST_F(GraphTest, UnusedSparseInitializerIsIgnored) {
   std::string s1;
   {
@@ -1609,14 +1646,14 @@ TEST_F(GraphTest, SparseInitializerHandling) {
     auto& graph_proto = model_proto_sparse.graph();
     ASSERT_EQ(graph_proto.initializer_size(), 0);
     ASSERT_EQ(graph_proto.sparse_initializer_size(), 1);
+    ValidateSparseTensorProto(graph_proto.sparse_initializer().at(0));
   }
 
   std::shared_ptr<onnxruntime::Model> p_tmp_model;
   auto x = onnxruntime::Model::Load(model_proto_sparse, p_tmp_model, nullptr, *logger_);
 
   auto& graph2 = p_tmp_model->MainGraph();
-  auto status = graph2.Resolve();
-  EXPECT_TRUE(status.IsOK()) << status.ErrorMessage();
+  EXPECT_STATUS_OK(graph2.Resolve());
   // Sparse initializer got converted to dense and appears on the list of initializers
   ASSERT_EQ(graph2.GetAllInitializedTensors().size(), 1U);
   ASSERT_EQ(graph2.GetAllInitializedTensors().cbegin()->first.compare(input_initializer_name), 0);
@@ -1635,6 +1672,7 @@ TEST_F(GraphTest, SparseInitializerHandling) {
     auto model_proto_get = p_tmp_model->ToProto();
     ASSERT_EQ(model_proto_get.graph().initializer_size(), 0);
     ASSERT_EQ(model_proto_get.graph().sparse_initializer_size(), 1);
+    ValidateSparseTensorProto(model_proto_get.graph().sparse_initializer().at(0));
   }
 }
 

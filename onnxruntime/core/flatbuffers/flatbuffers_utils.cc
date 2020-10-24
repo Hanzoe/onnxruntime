@@ -95,22 +95,6 @@ static Status SaveTensorTypeAndShapeOrtFormat(flatbuffers::FlatBufferBuilder& bu
   return Status::OK();
 }
 
-#if !defined(ORT_MINIMAL_BUILD)
-static Status SaveSparseTensorTypeOrtFormat(flatbuffers::FlatBufferBuilder& builder,
-                                            const TypeProto_SparseTensor& sparse_tensor_type_proto,
-                                            flatbuffers::Offset<fbs::SparseTensorType>& fps_sparse_tensor_type) {
-  flatbuffers::Offset<fbs::Shape> shape = 0;
-  if (sparse_tensor_type_proto.has_shape()) {
-    ORT_RETURN_IF_ERROR(SaveTensorShapeOrtFormat(builder, sparse_tensor_type_proto.shape(), shape));
-  }
-
-  fps_sparse_tensor_type = fbs::CreateSparseTensorType(
-      builder, static_cast<fbs::TensorDataType>(sparse_tensor_type_proto.elem_type()), shape);
-
-  return Status::OK();
-}
-#endif // ORT_MINIMAL_BUILD
-
 static Status SaveTypeInfoOrtFormat(flatbuffers::FlatBufferBuilder& builder,
                                     const TypeProto& type_proto,
                                     flatbuffers::Offset<fbs::TypeInfo>& fbs_type_info) {
@@ -139,18 +123,10 @@ static Status SaveTypeInfoOrtFormat(flatbuffers::FlatBufferBuilder& builder,
           SaveMapTypeOrtFormat(builder, type_proto.map_type(), fbs_map_type));
       value = fbs_map_type.Union();
     } break;
-#if !defined(ORT_MINIMAL_BUILD)
-    case TypeProto::kSparseTensorType: {
-      value_type = fbs::TypeInfoValue::sparse_tensor_type;
-      flatbuffers::Offset<fbs::SparseTensorType> fbs_sparse_tensor_type;
-      ORT_RETURN_IF_ERROR(SaveSparseTensorTypeOrtFormat(builder, type_proto.sparse_tensor_type(), fbs_sparse_tensor_type));
-      value = fbs_sparse_tensor_type.Union();
-    } break;
     default: {
       return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "We do not support type [", value_case, "] for now");
     } break;
   }
-#endif // ORT_MINIMAL_BUILD
 
   fbs::TypeInfoBuilder tb(builder);
   tb.add_denotation(denotation);
@@ -245,18 +221,6 @@ static Status LoadTensorTypeAndShapeOrtFormat(const fbs::TensorTypeAndShape& fbs
   return Status::OK();
 }
 
-#if !defined(ORT_MINIMAL_BUILD)
-static Status LoadSparseTensorTypeAndShapeOrtFormat(const fbs::SparseTensorType& fbs_sparse_tensor_type,
-                                                    TypeProto_SparseTensor& sparse_tensor_type_proto) {
-  sparse_tensor_type_proto.set_elem_type(static_cast<int32_t>(fbs_sparse_tensor_type.elem_type()));
-  auto fbs_shape = fbs_sparse_tensor_type.shape();
-  if (fbs_shape) {
-    ORT_RETURN_IF_ERROR(LoadTensorShapeOrtFormat(*fbs_shape, *sparse_tensor_type_proto.mutable_shape()));
-  }
-  return Status::OK();
-}
-#endif // ORT_MINIMAL_BUILD
-
 static Status LoadSequenceTypeOrtFormat(const fbs::SequenceType& fbs_sequence_type,
                                         TypeProto_Sequence& sequence_type_proto) {
   auto fbs_type_info = fbs_sequence_type.elem_type();
@@ -282,12 +246,6 @@ static Status LoadTypeInfoOrtFormat(const fbs::TypeInfo& fbs_type_info,
     auto fbs_tensor_type = fbs_type_info.value_as_tensor_type();
     ORT_RETURN_IF(nullptr == fbs_tensor_type, "Null tensor type info. Invalid ORT format model.");
     ORT_RETURN_IF_ERROR(LoadTensorTypeAndShapeOrtFormat(*fbs_tensor_type, *type_proto.mutable_tensor_type()));
-#if !defined(ORT_MINIMAL_BUILD)
-  } else if (value_type == fbs::TypeInfoValue::sparse_tensor_type) {
-    auto fbs_sparse_tensor_type = fbs_type_info.value_as_sparse_tensor_type();
-    ORT_RETURN_IF(nullptr == fbs_sparse_tensor_type, "Null sparse tensor type info. Invalid ORT format model.");
-    ORT_RETURN_IF_ERROR(LoadSparseTensorTypeAndShapeOrtFormat(*fbs_sparse_tensor_type, *type_proto.mutable_sparse_tensor_type()));
-#endif // ORT_MINIMAL_BUILD
   } else if (value_type == fbs::TypeInfoValue::sequence_type) {
     auto fbs_sequence_type = fbs_type_info.value_as_sequence_type();
     ORT_RETURN_IF(nullptr == fbs_sequence_type, "Null sequence type info. Invalid ORT format model.");

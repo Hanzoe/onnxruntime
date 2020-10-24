@@ -77,11 +77,6 @@ table SequenceType{
   elem_type:onnxruntime.experimental.fbs.TypeInfo;
 }
 
-table SparseTensorType {
-  elem_type:TensorDataType;
-  shape:Shape;
-}
-
 // Node
 enum NodeType : int32 {
   Primitive = 0,
@@ -126,12 +121,11 @@ table ValueInfo {
   type:TypeInfo;
 }
 
-// TODO add support of Opaque
+// TODO add support of SparseTensor, Opaque if needed
 union TypeInfoValue {
   tensor_type:TensorTypeAndShape,
   sequence_type:SequenceType,
   map_type:MapType,
-  sparse_tensor_type:SparseTensorType
 }
 
 table TypeInfo {

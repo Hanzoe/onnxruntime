@@ -26,8 +26,6 @@ using NodeIndex = size_t;
 using Version = int64_t;
 using NodeArgInfo = ONNX_NAMESPACE::ValueInfoProto;
 using InitializedTensorSet = std::unordered_map<std::string, const ONNX_NAMESPACE::TensorProto*>;
-using InitializedSparseTensorSet = std::unordered_set<std::reference_wrapper<const std::string>,
-  std::hash<std::string>, std::equal_to<std::string>>;
 using ArgNameToTypeMap = std::unordered_map<std::string, ONNX_NAMESPACE::TypeProto>;
 using ProviderType = const std::string&;
 // TODO - Evaluate switching the types below to support transparent comparators and enable

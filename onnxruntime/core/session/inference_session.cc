@@ -102,6 +102,8 @@ std::atomic<uint32_t> InferenceSession::global_session_id_{1};
 // Only update this version when there is a file format change which will break the compatibilites
 // Once this model version is updated, the kSupportedOrtModelVersions in IsOrtModelVersionSupported
 // below will also need to be updated.
+// Version 1 - history begins
+// Version 2 - add serailization/deserialization of sparse_initializer
 static constexpr const char* kOrtModelVersion = "2";
 
 #if defined(ENABLE_ORT_FORMAT_LOAD)
